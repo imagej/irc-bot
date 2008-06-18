@@ -1,0 +1,88 @@
+The IRC bot and web archives are two separate components:
+
+"shinybot" - the IRC bot
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+To be safe, we're going to run the IRC bot under a special uid,
+so add a new user with:
+
+  sudo adduser --disabled-login fiji-irc-bot
+
+(We don't want anyone to be able to log in as fiji-irc-bot.)
+Create the directory for the logs:
+
+  sudo mkdir /var/lib/fiji-irc-logs
+
+... and chown it to the bot user:
+
+  chown -R fiji-irc-bot.fiji-irc-bot /var/lib/fiji-irc-logs
+
+Take a hacky IRC bot script that I wrote and copy it to
+/usr/local/bin/shinybot-fiji.rb
+
+Some variables at the top of the script needed to be changed to
+tell it to connect to freenode, the right channel and where to
+dump the logs.
+
+We want to start the bot via sysvinit, so create a script
+/etc/init.d/fiji-irc-bot that looks like:
+
+   #! /bin/sh
+   
+   PATH=/bin:/usr/bin:/usr/local/bin
+   DESC="The #fiji IRC bot"
+   NAME=shinybot-fiji.rb
+   SCRIPT=/usr/local/bin/shinybot-fiji.rb
+   PIDFILE=/var/run/$NAME.pid
+   SCRIPTNAME=/etc/init.d/fiji-irc-bot
+   
+   STDOUT_LOG=/var/lib/fiji-irc-logs/stdout.log
+   STDERR_LOG=/var/lib/fiji-irc-logs/stderr.log
+   
+   DAEMON_ARGUMENTS="--name=$NAME --user=fiji-irc-bot.fiji-irc-bot -O=$STDOUT_LOG -E=$STDERR_LOG -o --errlog=/tmp/daemon.err --dbglog=/tmp/damon.dbg"
+   
+   # Exit if the package is not installed
+   [ -x "$SCRIPT" ] || exit 0
+   
+   # Define LSB log_* functions.
+   # Depend on lsb-base (>= 3.0-6) to ensure that this file is
+   # present.
+   . /lib/lsb/init-functions
+   
+   case "$1" in
+     start)
+           [ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC"
+           "$NAME"
+           daemon $DAEMON_ARGUMENTS $SCRIPT
+           ;;
+     stop)
+           [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC"
+           "$NAME"
+           daemon $DAEMON_ARGUMENTS --stop $SCRIPT
+           ;;
+     restart|force-reload)
+           log_daemon_msg "Restarting $DESC" "$NAME"
+           daemon $DAEMON_ARGUMENTS --restart $SCRIPT
+           ;;
+     *)
+           echo "Usage: $SCRIPTNAME
+           {start|stop|restart|force-reload}" >&2
+           exit 3
+           ;;
+   esac
+
+This script uses a program called daemon to deal with some of
+the tedious steps in starting up and killing a daemon.  It was
+installed with: sudo apt-get install daemon
+
+Now we need to make sure that this starts when the system goes
+to multiuser mode with:
+
+  sudo update-rc.d fiji-irc-bot multiuser 90 10
+
+The web archive
+~~~~~~~~~~~~~~~
+
+The web archive is a similarly hacky CGI script, which I just
+copied to /usr/lib/cgi-bin/fiji-irc and edited so that it points
+at the right directory for the logs.
