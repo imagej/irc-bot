@@ -42,7 +42,7 @@ class IRCClient
     @password = ""
     @realname = "shinybot version 0.3"
     @nick = $botname
-    @channel = "fiji"
+    @channel = "fiji-devel"
     @mutex = Mutex.new
     @last_ping = nil
     @last_pong = nil
@@ -181,8 +181,8 @@ class IRCClient
 
     when "JOIN"
       replynick, replyuser, replyhost = parse_prefix prefix
-      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org")) && 
-          (replyuser =~ /^([a-f0-9]{8})$/)
+      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "pacific.mpi-cbg.de")) && 
+          (replyuser =~ /^n=([a-f0-9]{8})$/)
         begin
           message = nil
           ip_encoded_in_username = $1.dup
