@@ -59,7 +59,7 @@ def gitweb_url_for_repo( object, lineno, repo )
   end
   tail = ';hb=' + `sed 's/^ref: //' < #{base_git_dir}#{repo}/HEAD`.chomp
   if lineno
-    tail += '#l' + lineno.gsub /^:/,
+    tail += '#l' + lineno.gsub(/^:/,'')
   end
   return base_gitweb_url + repo + ';a=' + action + file + ';h=' + object + tail
 end
