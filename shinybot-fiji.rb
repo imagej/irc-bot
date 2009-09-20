@@ -79,9 +79,9 @@ def gitweb_url( object, lineno )
 end
 
 class IRCClient
-  
+
   attr_accessor :host, :port, :password, :realname, :nick, :channel
-  
+
   def initialize
     # @host = "rrt.sc3d.org"
     @port = "6667"
@@ -121,7 +121,7 @@ class IRCClient
   def log_action( who, what )
     log_line sprintf( "%s: %s* %s", iso_time, who, what )
   end
-  
+
   def log_event( event )
     log_line sprintf( "%s: *: %s", iso_time, event )
   end
@@ -145,9 +145,9 @@ class IRCClient
       raise "Got malformed prefix (#{prefix})"
     end
   end
-  
+
   def send( command, *parameters )
-    @mutex.synchronize do 
+    @mutex.synchronize do
       message = command + " " + parameters.join( ' ' ) + "\r\n"
       log_event "==> " + message.chomp
       @socket.print message
@@ -175,19 +175,19 @@ class IRCClient
       sleep 0.5
     end
   end
-  
+
   def get_next_line
 
     line = @socket.gets
     return unless line
 
     line.chomp!
-    
+
     prefix = nil
     command = nil
-    
+
     log_event "<== " + line
-    
+
     if line.gsub!( /^:(\S+)\s+(\S+)/, '' )
       prefix = $1
       command = $2
@@ -196,9 +196,9 @@ class IRCClient
     else
       raise "Couldn't parse message from the IRC server: #{line}"
     end
-    
+
     # Now call a handler for that command:
-    
+
     case command
 
     when "ERROR"
@@ -221,14 +221,14 @@ class IRCClient
     when "KICK"
       # Just rejoin immediately...
       send( "JOIN", "#" + @channel )
-      
+
     when "376" # That's the end of MOTD message...
       @finding_a_nick = false
       send( "JOIN", "#" + channel )
 
     when "JOIN"
       replynick, replyuser, replyhost = parse_prefix prefix
-      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "pacific.mpi-cbg.de")) && 
+      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "pacific.mpi-cbg.de")) &&
           (replyuser =~ /^n=([a-f0-9]{8})$/)
         begin
           message = nil
@@ -284,7 +284,7 @@ class IRCClient
         text = $2
         # log_event "  recipient: " + recipient
         # log_event "  text: " + text
-        
+
         if recipient == nick
           replynick, replyuser, replyhost = parse_prefix prefix
           replyto = replynick
@@ -328,7 +328,7 @@ class IRCClient
           send( "MODE", "#" + @channel, "+o", replynick )
           return
         end
-        
+
         if text =~ /^\!?#{@nick}[,:]?\s+(.*)\s*$/
           message = $1
         elsif ! (recipient =~ /^#/)
@@ -358,19 +358,19 @@ class IRCClient
           # Ignore the message...
           log_event "Ignoring that one..."
         end
-        
+
       else
         raise "Couldn't parse a PRIVMSG (#{line})"
       end
-      
+
     when "513"
       # Seem to get this if you PONG with the wrong reply number...
-      
+
     when "PING"
       if line =~ /^\s+:(\S+)/
         send( "PONG", ":" + $1 )
       end
-      
+
     when "PONG"
       if line =~ /^\s+\S+\s+:(\S+)/
         begin
@@ -379,7 +379,7 @@ class IRCClient
           raise "We got an unexpected PONG"
         end
       end
-      
+
     end
 
     # log_event "   prefix is: " + prefix.to_s
@@ -387,13 +387,13 @@ class IRCClient
     # log_event "   line left: " + line
 
   end
-    
+
   def mainloop
-      
+
     sleep_before_connecting = 0
 
     loop do
-      
+
       sleep sleep_before_connecting
 
       @last_ping = nil
@@ -435,9 +435,9 @@ class IRCClient
       actually_quit = false
       @pingthread_stop = false
       @pingthread = Thread.new { pingthread }
-      
+
       loop do
-        
+
         begin
           get_next_line
         rescue SignalException => e
@@ -465,7 +465,7 @@ class IRCClient
         end
 
       end
-      
+
       begin
         @socket.close
       rescue Errno::ENOTCONN
