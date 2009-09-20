@@ -31,6 +31,50 @@ def whois_for_ip( ip_string )
   return s ? s : "No information found by whois"
 end
 
+def gitweb_url_for_repo( object, repo )
+  base_git_dir = '/srv/git/'
+  base_gitweb_url = 'http://pacific.mpi-cbg.de/cgi-bin/gitweb.cgi?p='
+
+  git = 'git --git-dir=' + base_git_dir + repo
+  file = ''
+  action = `#{git} cat-file -t #{object} 2>/dev/null`.chomp
+  if action.empty?
+    files = `#{git} rev-parse --verify HEAD:#{object} 2>/dev/null`.chomp
+    if files.empty?
+      grep = 'grep "/' + object + '$" 2>/dev/null'
+      files = `#{git} ls-tree -r --name-only HEAD | #{grep}`.chomp
+      if files.empty? or files =~ /\n/
+        return nil
+      end
+      file = ';f=' + files
+      object = `#{git} rev-parse HEAD:#{files}`.chomp
+    else
+      file = ';f=' + object
+      object = files
+    end
+    action = `#{git} cat-file -t #{object} 2>/dev/null`.chomp
+  end
+  if action == 'object'
+    action = 'objectdiff'
+  end
+  tail = ';hb=' + `sed 's/^ref: //' < #{base_git_dir}#{repo}/HEAD`.chomp
+  return base_gitweb_url + repo + ';a=' + action + file + ';h=' + object + tail
+end
+
+def gitweb_url( object )
+  repos = %w[
+    fiji.git ImageJA.git trakem2.git VIB.git mpicbg.git bio-formats/.git
+  ]
+
+  repos.each do |repo|
+    url = gitweb_url_for_repo( object, repo )
+    if url
+      return url
+    end
+  end
+  return nil
+end
+
 class IRCClient
   
   attr_accessor :host, :port, :password, :realname, :nick, :channel
@@ -267,7 +311,14 @@ class IRCClient
           send( "PRIVMSG", replyto, ":" + reply )
           return
         end
-        
+
+        if text =~ /\b([0-9a-f]{40}|[-._0-9\/A-Za-z]+\.(java|py|rb)(:\d+)?)\b/
+          url = gitweb_url($1)
+          unless url
+            send( "PRIVMSG", replyto, ":In Gitweb: " + url )
+          end
+        end
+
         message = nil
 
         if (recipient == nick) && (text =~ /(^\s*|\W|^\s*y)a+rr+($|\W)/i)
