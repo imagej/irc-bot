@@ -31,7 +31,7 @@ def whois_for_ip( ip_string )
   return s ? s : "No information found by whois"
 end
 
-def gitweb_url_for_repo( object, repo )
+def gitweb_url_for_repo( object, lineno, repo )
   base_git_dir = '/srv/git/'
   base_gitweb_url = 'http://pacific.mpi-cbg.de/cgi-bin/gitweb.cgi?p='
 
@@ -58,16 +58,19 @@ def gitweb_url_for_repo( object, repo )
     action = 'objectdiff'
   end
   tail = ';hb=' + `sed 's/^ref: //' < #{base_git_dir}#{repo}/HEAD`.chomp
+  if lineno
+    tail += '#l' + lineno.gsub /^:/,
+  end
   return base_gitweb_url + repo + ';a=' + action + file + ';h=' + object + tail
 end
 
-def gitweb_url( object )
+def gitweb_url( object, lineno )
   repos = %w[
     fiji.git ImageJA.git trakem2.git VIB.git mpicbg.git bio-formats/.git
   ]
 
   repos.each do |repo|
-    url = gitweb_url_for_repo( object, repo )
+    url = gitweb_url_for_repo( object, lineno, repo )
     if url
       return url
     end
@@ -313,7 +316,7 @@ class IRCClient
         end
 
         if text =~ /\b([0-9a-f]{40}|[._0-9A-Za-z][-._0-9\/A-Za-z]+\.(java|py|rb)(:\d+)?)\b/
-          url = gitweb_url($1)
+          url = gitweb_url( $1, $3 )
           unless url
             send( "PRIVMSG", replyto, ":In Gitweb: " + url )
           end
