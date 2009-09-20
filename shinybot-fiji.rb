@@ -312,7 +312,7 @@ class IRCClient
           return
         end
 
-        if text =~ /\b([0-9a-f]{40}|[-._0-9\/A-Za-z]+\.(java|py|rb)(:\d+)?)\b/
+        if text =~ /\b([0-9a-f]{40}|[._0-9A-Za-z][-._0-9\/A-Za-z]+\.(java|py|rb)(:\d+)?)\b/
           url = gitweb_url($1)
           unless url
             send( "PRIVMSG", replyto, ":In Gitweb: " + url )
