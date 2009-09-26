@@ -336,6 +336,12 @@ class IRCClient
           end
         end
 
+        if text =~ /([bB]ug|[Ii]ssue)\s+(\d+)/
+          bug_number = $2.to_i(10)
+          url = "http://pacific.mpi-cbg.de/cgi-bin/bugzilla/show_bug.cgi?id=#{bug_number}"
+          send( "PRIVMSG", replyto, ":Bug number #{bug_number} can be found here: #{url}" )
+        end
+
         message = nil
 
         if (recipient == nick) && (text =~ /(^\s*|\W|^\s*y)a+rr+($|\W)/i)
