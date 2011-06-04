@@ -46,7 +46,7 @@ end
 
 def gitweb_url_for_repo( object, lineno, repo )
   base_git_dir = '/srv/git/'
-  base_gitweb_url = 'http://pacific.mpi-cbg.de/cgi-bin/gitweb.cgi?p='
+  base_gitweb_url = 'http://fiji.sc/cgi-bin/gitweb.cgi?p='
 
   git = 'git --git-dir=' + base_git_dir + repo
   file = ''
@@ -241,7 +241,7 @@ class IRCClient
 
     when "JOIN"
       replynick, replyuser, replyhost = parse_prefix prefix
-      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "pacific.mpi-cbg.de")) &&
+      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "fiji.sc")) &&
           (replyuser =~ /^n=([a-f0-9]{8})$/)
         begin
           message = nil
@@ -338,7 +338,7 @@ class IRCClient
 
         if text =~ /([bB]ug|[Ii]ssue)\s+(\d+)/
           bug_number = $2.to_i(10)
-          url = "http://pacific.mpi-cbg.de/cgi-bin/bugzilla/show_bug.cgi?id=#{bug_number}"
+          url = "http://fiji.sc/cgi-bin/bugzilla/show_bug.cgi?id=#{bug_number}"
           send( "PRIVMSG", replyto, ":Bug number #{bug_number} can be found here: #{url}" )
         end
 
@@ -358,7 +358,7 @@ class IRCClient
         if message
           case message
           when /^help/i
-            send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://pacific.mpi-cbg.de/cgi-bin/fiji-irc")
+            send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://fiji.sc/cgi-bin/fiji-irc")
           when /^last\s*$/
             send_last_lines( replynick, 5 )
           when /^last ([0-9]+)$/
