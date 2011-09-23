@@ -364,10 +364,10 @@ class IRCClient
           end
         end
 
-        if text =~ /([bB]ug|[Ii]ssue)\s+(\d+)/
-          bug_number = $2.to_i(10)
-          url = "http://fiji.sc/cgi-bin/bugzilla/show_bug.cgi?id=#{bug_number}"
-          send( "PRIVMSG", replyto, ":Bug number #{bug_number} can be found here: #{url}" )
+        if text =~ /\b([bB]ug|[Ii]ssue|[Tt]icket)\s+#?(\d+)\b/
+          ticket_number = $2.to_i(10)
+          url = "http://dev.imagejdev.org/trac/imagej/ticket/#{ticket_number}"
+          send( "PRIVMSG", replyto, ":Ticket #{ticket_number} can be found here: #{url}" )
         end
 
         message = nil
