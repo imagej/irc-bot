@@ -370,6 +370,12 @@ class IRCClient
           send( "PRIVMSG", replyto, ":Ticket #{ticket_number} can be found here: #{url}" )
         end
 
+        if text =~ /\br(\d+)\b/
+          revision = $1.to_i(10)
+          url = "http://dev.imagejdev.org/trac/imagej/changeset/#{revision}"
+          send( "PRIVMSG", replyto, ":Changeset #{revision} can be found here: #{url}" )
+        end
+
         message = nil
 
         if (recipient == nick) && (text =~ /(^\s*|\W|^\s*y)a+rr+($|\W)/i)
