@@ -44,9 +44,20 @@ def whois_for_ip( ip_string )
   return s ? s : "No information found by whois"
 end
 
+# The following states mean:
+#   0 waiting for the first MM (will respond: "do dooo bedodo")
+#   1 waiting for the second MM (will respond: "do do-do do")
+#   2 waiting for the third MM (will respond: "do dooo bedodo, bedodo, bedodo, be-doodle-doodle-do do do-do do")
+#   3 waiting for anything at all (will repond: "/me gives <> a hard stare")
+# After state 3, goes immediately to state 0
+
+$mahna_mahnah_state = 0
+
+$mm_re = /^ *m[a\303\240]+h?[ \-]*n[a\303\240]+h?[ \-]*m[a\303\240]+h?[ \-]*n[a\303\240]+h?/i
+
 def gitweb_url_for_repo( object, lineno, repo )
   base_git_dir = '/srv/git/'
-  base_gitweb_url = 'http://fiji.sc/cgi-bin/gitweb.cgi?p='
+  base_gitweb_url = 'http://fiji.sc/git/?p='
 
   git = 'git --git-dir=' + base_git_dir + repo
   file = ''
@@ -79,7 +90,7 @@ end
 
 def gitweb_url( object, lineno )
   repos = %w[
-    fiji.git ImageJA.git trakem2.git VIB.git mpicbg.git bio-formats/.git
+    fiji.git ImageJA.git trakem2.git mpicbg.git bio-formats/.git
   ]
 
   repos.each do |repo|
@@ -118,7 +129,7 @@ class IRCClient
   end
 
   def today_log_file_name
-    "/var/lib/fiji-irc-logs/fiji-irc-log-#{date_string}"
+    "/data/devel/irc-bot/logs/fiji-irc-log-#{date_string}"
   end
 
   def log_line( line )
@@ -241,7 +252,7 @@ class IRCClient
 
     when "JOIN"
       replynick, replyuser, replyhost = parse_prefix prefix
-      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "fiji.sc")) &&
+      if ((replyhost == "gimel.esc.cam.ac.uk") || (replyhost == "82-69-166-74.dsl.in-addr.zen.co.uk") || (replyhost == "global.panaceas.org") || (replyhost == "pacific.mpi-cbg.de")) &&
           (replyuser =~ /^n=([a-f0-9]{8})$/)
         begin
           message = nil
@@ -328,7 +339,24 @@ class IRCClient
           return
         end
 
-        if text =~ /\b([0-9a-f]{40}|[._0-9A-Za-z][-._0-9\/A-Za-z]+\.(java|py|rb|sh|cxx|bsh|clj|h|js|lut|svg|txt|TXT))(:\d+)?\b/
+        if (text =~ $mm_re) && (recipient =~ /^(\#.*)/)
+          if $mahna_mahnah_state == 0
+            send_message( replyto, "do dooo bedodo" )
+            $mahna_mahnah_state += 1
+          elsif $mahna_mahnah_state == 1
+            send_message( replyto, "do do-do do" )
+            $mahna_mahnah_state += 1
+          elsif $mahna_mahnah_state == 2
+            send_message( replyto, "do dooo bedodo, bedodo, bedodo, be-doodle-doodle-do do do-do do" )
+            $mahna_mahnah_state += 1
+          elsif $mahna_mahnah_state == 3
+            send_message( replyto, "\x01ACTION gives #{replynick} a hard stare.\x01" )
+            $mahna_mahnah_state = 0
+          end
+          return
+        end
+
+        if text =~ /\b([0-9a-f]{40}|[._0-9A-Za-z][-._0-9\/A-Za-z]+\.(java|c|py|rb|sh|cxx|bsh|clj|h|js|lut|svg|txt|TXT))(:\d+)?\b/
           url = gitweb_url( $1, $3 )
           if url
             tinyurl = make_tinyurl url
@@ -358,7 +386,7 @@ class IRCClient
         if message
           case message
           when /^help/i
-            send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://fiji.sc/cgi-bin/fiji-irc")
+            send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://code.imagej.net/chatlogs/fiji-devel")
           when /^last\s*$/
             send_last_lines( replynick, 5 )
           when /^last ([0-9]+)$/

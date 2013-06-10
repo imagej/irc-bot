@@ -57,7 +57,9 @@ $mm_re = /^ *m[a\303\240]+h?[ \-]*n[a\303\240]+h?[ \-]*m[a\303\240]+h?[ \-]*n[a\
 
 def gitweb_url_for_repo( object, lineno, repo )
   base_git_dir = '/srv/git/'
-  base_gitweb_url = 'http://fiji.sc/cgi-bin/gitweb.cgi?p='
+  base_gitweb_url = 'http://fiji.sc/git/?p='
+
+  is_commit = object =~ /\b[0-9a-f]{40}\b/
 
   git = 'git --git-dir=' + base_git_dir + repo
   file = ''
@@ -85,6 +87,17 @@ def gitweb_url_for_repo( object, lineno, repo )
   if lineno
     tail += '#l' + lineno.gsub(/^:/,'')
   end
+
+  # CTR HACK to use GitHub code browser for imagej
+  if repo == 'imagej2/.git'
+    if is_commit:
+      return 'https://github.com/imagej/imagej/commit/' + object
+    else
+      return 'https://github.com/imagej/imagej/' +
+        action + '/master/' + file[3..-1]
+    end
+  end
+
   return base_gitweb_url + repo + ';a=' + action + file + ';h=' + object + tail
 end
 
@@ -129,7 +142,7 @@ class IRCClient
   end
 
   def today_log_file_name
-    "/var/lib/imagejdev-irc-logs/imagejdev-irc-log-#{date_string}"
+    "/data/devel/irc-bot/logs/imagej-irc-log-#{date_string}"
   end
 
   def log_line( line )
@@ -366,13 +379,13 @@ class IRCClient
 
         if text =~ /\b([bB]ug|[Ii]ssue|[Tt]icket)\s+#?(\d+)\b/
           ticket_number = $2.to_i(10)
-          url = "http://dev.imagejdev.org/trac/imagej/ticket/#{ticket_number}"
+          url = "http://trac.imagej.net/ticket/#{ticket_number}"
           send( "PRIVMSG", replyto, ":Ticket #{ticket_number} can be found here: #{url}" )
         end
 
         if text =~ /\br(\d+)\b/
           revision = $1.to_i(10)
-          url = "http://dev.imagejdev.org/trac/imagej/changeset/#{revision}"
+          url = "http://trac.imagej.net/changeset/#{revision}"
           send( "PRIVMSG", replyto, ":Changeset #{revision} can be found here: #{url}" )
         end
 
@@ -392,7 +405,7 @@ class IRCClient
         if message
           case message
           when /^help/i
-            send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://fiji.sc/cgi-bin/imagejdev-irc")
+            send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://code.imagej.net/chatlogs/imagejdev")
           when /^last\s*$/
             send_last_lines( replynick, 5 )
           when /^last ([0-9]+)$/
