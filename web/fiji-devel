@@ -1,0 +1,717 @@
+#!/usr/bin/ruby -w
+
+# Things To Do:
+#   - interpret mIRC colours / bold?
+
+require 'iconv'
+require 'date'
+
+require 'cgi'
+$cgi = CGI.new("html4Tr")
+
+$log_directory = '/data/devel/irc-bot/logs/'
+$log_prefix = 'fiji-irc-log-'
+$report_time_after_seconds = 60 * 5
+$zero_width_space = '<span style="font-size: 0px;"> </span>'
+$real_zero_width_space = "&#x200B;"
+$date_log_starts = '2008-06-18'
+$date_today = Time.now.strftime("%Y-%m-%d")
+
+$date_a_week_ago = (Time.now - 7 * (60 * 60 * 24)).strftime("%Y-%m-%d")
+
+$converters = [ Iconv.new( "UTF-8", "iso8859-1" ),
+                Iconv.new( "UTF-8", "iso8859-15" ),
+                Iconv.new( "UTF-8", "windows-1252" ) ]
+
+now = Time.now
+if now.hour > 4
+  $date_last_4_am = Date.today.to_s
+  $date_next_4_am = (Date.today + 1).to_s
+  $date_last_4_am_yesterday = (Date.today - 1).to_s
+  $date_next_4_am_yesterday = Date.today.to_s
+else
+  $date_last_4_am = (Date.today - 1).to_s
+  $date_next_4_am = Date.today.to_s
+  $date_last_4_am_yesterday = (Date.today - 2).to_s
+  $date_next_4_am_yesterday = (Date.today - 1).to_s
+end
+
+$url_regexp = '((http|https|ftp):\/\/[\w;\|\/\?\:@&=+\$,-\.\!~\*\'\(\)\%#]*)'
+
+$re_regexp = Regexp.new( '(^|\s)(s/(.*?)/(.*?)/|s#(.*?)#(.*?)#|s"(.*?)"(.*?)")([gsimu]*)', Regexp::MULTILINE, 'U' )
+
+def valid_utf8?( s )
+  s =~ /^(([\x00-\x7f]|[\xc0-\xdf][\x80-\xbf]|[\xe0-\xef][\x80-\xbf]{2}|[\xf0-\xf7][\x80-\xbf]{3})*)(.*)$/m
+  $3.empty?
+end
+
+def safe_backticks( *command )
+  
+  raise "Must supply a block to safe_backticks" unless block_given?
+  
+  result = []
+  
+  Kernel.open( "|-", "r" ) do |f|
+    if f
+      f.each_line do |line|
+        yield line
+      end
+    else
+      begin
+        exec( *command )
+      rescue
+        raise "Couldn't exec #{command}: #{$!}\n"
+      end
+    end
+  end
+  
+  result
+  
+end
+
+def unescape_logged_message( message )
+  valid = valid_utf8? message
+  if (message == message) && valid
+    # Then there was nothing to convert...
+    return message
+  elsif valid
+    # Then there was some coversion, but it's all OK.
+    return message
+  else
+    # Otherwise, some legacy encoding was probably in use...
+    converted = nil
+    $converters.each do |c|
+      begin
+        converted = c.iconv( message )
+        converted << c.iconv( nil )
+        break
+      rescue
+        puts "Conversion failed..."
+        converted = nil
+      end
+    end
+    if converted
+      return converted
+    else
+      # Give up and return the original string.
+      return message
+    end
+  end
+end
+
+def url_to_html( url )
+  url_in_text = CGI.escapeHTML( url )
+  if url.length > 32
+    url_in_text.gsub!( /(\/+)/u ) { |m| m + $zero_width_space }
+    url_in_text.gsub!( /(&amp;)/u ) { |m| m + $zero_width_space }
+  end
+  "<a href=\"#{url}\">" + url_in_text + "</a>"
+end
+
+def break_long_words!( text )
+  text.gsub!( /([\w\-\!\?]{64}\w*)/u ) { |m1| 
+    m1.gsub( /([\w\-\!\?]{4})/u ) { |m2| 
+      m2 + $zero_width_space
+    }
+  }
+end
+
+def word_wrap( text, columns )
+  result = ""
+  while (text.length > columns) && (text.length > 0)
+    index = (text[0...columns] =~ /\s+(\S*?)$/u)
+    url_start_index = (text =~ Regexp.new( $url_regexp, Regexp::MULTILINE) )
+    url_length = nil
+    if url_start_index
+      url_length = $1.length
+    end
+    if index
+      # There's whitespace before the wrap point.
+      # So, wrap there, unless it would split a URL.
+      if url_start_index
+        if (index < url_start_index) || (index > (url_start_index + url_length))
+          # Then it won't be split, so do nothing...
+        else
+          # If the URL starts at the beginning of the line, split after the URL.
+          if 0 == url_start_index
+            index = url_length
+          else
+            # Otherwise split just at the beginning of the URL.
+            index = url_start_index
+          end
+        end
+      else
+        # Do nothing, index is at the right spot.
+      end
+    else
+      if columns < text.length
+        # There's no whitespace before the wrap point.
+        if url_start_index
+          if (columns < url_start_index) || (columns > (url_start_index + url_length))
+            # Then it won't be split, so split at the right hand side anyway...
+            index = columns
+          else
+            # If the URL starts at the beginning of the line, split after the URL.
+            if 0 == url_start_index
+              index = url_length
+            else
+              # Otherwise split just at the beginning of the URL.
+              index = url_start_index
+            end
+          end
+        else
+          # Don't worry about URLs, split at the column end.
+          index = columns
+        end
+      else
+        # Then just split at the end...
+        index = text.length
+      end
+    end
+    
+    result += text[0...index]
+    text = text[index..-1].gsub( /^\s*/um, '' )
+    
+    if text.length > 0
+      result += "\n"
+    end
+    
+  end
+  
+  result += text
+  
+end
+
+def strip_leading_spaces_and_zeros( s )
+  s.sub( /^(\s*0*)([1-9])/, '\2' )
+end
+
+def print_footer_and_exit
+  if $format == 'html'
+    puts "  </body>\n</html>"
+    exit
+  end
+end
+
+# ------------------------------------------------------------------------
+
+# Get the parameters, either from CGI parameters, or just use defaults
+# on the command line...
+
+$wrap_at_column = nil
+$time_style = nil
+search = nil
+
+$time_style = $cgi.params['times'][0]
+
+# Use the presence of a time parameter to indicate we're showing
+# results rather producing a form...
+
+unless $time_style
+  
+  print "Content-Type: text/html; charset=UTF-8\n\n"
+  
+  print <<EOPAGE
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link rel="stylesheet" type="text/css" href="/fiji-irc.css" title="Search Page">
+    <title>#fiji-devel logs</title>
+    <script type="text/javascript">
+<!--
+       function setToFullRange() {
+          document.getElementById("start-date-input").value = \"#{$date_log_starts}\";
+          document.getElementById("end-date-input").value = \"#{$date_today}\";
+       }
+
+       function setToLastWeek() {
+          document.getElementById("start-date-input").value = \"#{$date_a_week_ago}\";
+          document.getElementById("end-date-input").value = \"#{$date_today}\";
+       }
+-->
+    </script>
+  </head>
+  <body>
+
+    <h2>#fiji-devel logs</h2>
+
+    <p>[ Common Searches: 
+         <a href="#{ENV['SCRIPT_NAME']}?times=prefix&amp;start-date=#{$date_last_4_am}&amp;start-time=0400&amp;end-date=#{$date_next_4_am}&amp;end-time=0400">Today</a> |
+         <a href="#{ENV['SCRIPT_NAME']}?times=prefix&amp;start-date=#{$date_last_4_am_yesterday}&amp;start-time=0400&amp;end-date=#{$date_next_4_am_yesterday}&amp;end-time=0400">Yesterday</a> ]</p>
+
+   <div class="log-search">
+
+    <h3 class="search-type">Full log search (defaults to just the last week)</h3>
+    <form class="search-form" action="#{ENV['SCRIPT_NAME']}" method="GET">
+      <p>
+      <b>search regular expression:</b> <input name="search" type="text" maxlength="64">
+      </p>
+      <p>
+      set date range via javascript to: <a href="#" onClick="setToFullRange();">the complete logs</a> <a href="#" onClick="setToLastWeek();">the last week</a>
+      </p>
+      <p>
+      <b>start date:</b> <input id="start-date-input" name="start-date" type="text" maxlength="10" value="#{$date_a_week_ago}">
+      </p>
+      <p>
+      <b>end date:</b> <input id="end-date-input" name="end-date" type="text" maxlength="10" value="#{$date_today}">
+      </p>
+      <p>
+      <b>output format:</b> <select name="format">
+        <option selected value="html">HTML</option>
+        <option value="txt">Plain Text</option>
+      </select>
+      </p>
+      <p>
+      <b>wrap at column:</b> <input name="columns" type="text" maxlength="4" value="78">
+      (only applies to Plain Text Output)
+      </p>
+      <p>
+      <b>time style:</b>
+      <select name="times">
+        <option selected value="sparse">Sparse</option>
+        <option value="none">None</option>
+        <option value="prefix">Prefix</option>
+      </select> (only applies to Plain Text Output)
+      </p>
+      <p>
+      <input name="submit" type="submit" value="search"> <input name="reset" type="reset" value="reset">
+      </p>
+    </form>
+  </div>
+
+  </body>
+EOPAGE
+  
+  exit
+  
+end
+
+if ($format = $cgi.params['format'][0])
+  case $format
+  when 'html'
+  when 'txt'
+  else
+    $format = 'html'
+  end
+else
+  $format = 'html'
+end
+
+if $format == 'html'
+  print <<EOHEADER
+Content-Type: text/html; charset=UTF-8
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <link rel="stylesheet" type="text/css" href="/fiji-irc.css" title="Search Page">
+    <title>#fiji log search results</title>
+  </head>
+  <body>
+EOHEADER
+  
+else
+  print "Content-Type: text/plain; charset=UTF-8\n\n"
+end
+
+case $time_style
+when "none"
+when "prefix"
+when "sparse"
+else
+  print "Unknown time style '#{$time_style}'"
+  print_footer_and_exit
+end
+
+search = $cgi.params['search'][0]
+
+begin
+  $wrap_at_column = $cgi.params['columns'][0]
+  if $wrap_at_column
+    $wrap_at_column = Integer(strip_leading_spaces_and_zeros($wrap_at_column))
+    unless $wrap_at_column >= 1
+      raise
+    end
+  else
+    $wrap_at_column = 78
+  end
+rescue
+  print "The 'columns' parameter should be a positive integer."
+  print_footer_and_exit
+end
+
+start_date = $cgi.params['start-date'][0]
+end_date = $cgi.params['end-date'][0]
+
+start_time = $cgi.params['start-time'][0]
+end_time = $cgi.params['end-time'][0]
+
+t = $cgi.params['t'][0]
+if t
+  unless t =~ /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/
+    print "The exact time to search for was malformed."
+    print_footer_and_exit
+  end
+  unless start_date
+    start_date = $1 + '-' + $2 + '-' + $3
+  end
+  unless end_date
+    end_date = $1 + '-' + $2 + '-' + $3
+  end
+end
+
+start_hour = nil
+start_minute = nil
+
+end_hour = nil
+end_minute = nil
+
+if start_time
+  unless start_time =~ /^(\d{2})(\d{2})$/
+    print "The start date must be in the format: HHMM"
+    print_footer_and_exit
+  end
+  start_hour = Integer(strip_leading_spaces_and_zeros($1))
+  start_minute = Integer(strip_leading_spaces_and_zeros($2))
+end
+
+unless start_hour
+  start_hour = 4
+end
+unless start_minute
+  start_minute = 0
+end
+
+move_on_end_extra_day = false
+
+if end_time
+  unless end_time =~ /^(\d{2})(\d{2})$/
+    print "The start date must be in the format: HHMM"
+    print_footer_and_exit
+  end
+  end_hour = Integer(strip_leading_spaces_and_zeros($1))
+  end_minute = Integer(strip_leading_spaces_and_zeros($2))
+end
+
+unless end_hour
+  end_hour = 4
+  move_on_end_extra_day = true
+end
+unless end_minute
+  end_minute = 0
+end
+
+unless start_date
+  start_date = $date_log_starts
+end
+unless start_date =~ /^(\d\d\d\d)\-(\d\d)\-(\d\d)$/
+  print "The start date must be in ISO 8601 format: YYYY-MM-DD"
+  print_footer_and_exit
+end
+
+begin
+  start_date = Time.mktime( Integer(strip_leading_spaces_and_zeros($1)),
+                            Integer(strip_leading_spaces_and_zeros($2)), 
+                            Integer(strip_leading_spaces_and_zeros($3)),
+                            start_hour,
+                            start_minute, 0, 0 )
+
+rescue
+  print "The start date was not a valid date."
+  print_footer_and_exit
+end
+
+unless end_date
+  end_date = $date_today
+end
+unless end_date =~ /^(\d\d\d\d)\-(\d\d)\-(\d\d)$/
+  print "The end date must be in ISO 8601 format: YYYY-MM-DD"
+  print_footer_and_exit
+end
+
+begin
+
+  end_year = Integer(strip_leading_spaces_and_zeros($1))
+  end_month = Integer(strip_leading_spaces_and_zeros($2))
+  end_day = Integer(strip_leading_spaces_and_zeros($3))
+
+  end_date = Time.mktime( end_year,
+                          end_month,
+                          end_day,
+                          end_hour,
+                          end_minute, 0, 0 )
+
+  if move_on_end_extra_day
+    end_date = end_date + (60 * 60 * 24)
+  end
+
+rescue
+  print "The end date was not a valid date."
+  print_footer_and_exit
+end  
+
+if end_date < start_date
+  print "The end date must be after (or the same as) the start date."
+  print_footer_and_exit
+end
+
+# ------------------------------------------------------------------------
+
+files = Array.new
+
+file_date = start_date.dup
+
+while file_date <= end_date
+  files.push $log_directory + $log_prefix + file_date.strftime("%Y-%m-%d")
+  file_date = file_date + (60 * 60 * 24)
+end
+
+files = files.find_all { |filename| FileTest.exist?( filename ) }
+
+last_date = ""
+last_time = Time.at( 0 )
+
+if search
+  regexp_search = Regexp.new( search, Regexp::IGNORECASE, 'U' )
+else
+  regexp_search = nil
+end
+
+actually_searching_for_something = (search && (! search.empty?))
+
+#    if actually_searching_for_something
+#       puts "(actually searching for something...)"
+#    else
+#       puts "(not actually searching for something)"
+#    end
+
+class Message
+  
+  attr_accessor :all
+  attr_accessor :year
+  attr_accessor :month
+  attr_accessor :day
+  attr_accessor :hour
+  attr_accessor :minute
+  attr_accessor :second
+  attr_accessor :nick
+  attr_accessor :user
+  attr_accessor :host
+  attr_accessor :entry_indicator
+  attr_accessor :text
+  attr_accessor :actual_match
+  
+  def Message.from_line( line )
+    
+    m = Message.new
+    
+    unless line =~ /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}): (([\w\|\-\.\[\]]+)!([\w\|\-\.~\^=]+)@|)([\w\|\-\.\/]+)([\:\*\>\#]) (.*)$/
+      return nil
+    end
+    
+    m.all, m.year, m.month, m.day, m.hour, m.minute,
+    m.second, optional, m.nick, m.user, m.host, m.entry_indicator, m.text = $~.to_a
+    
+    if optional.empty?
+      m.nick = m.host
+    end
+    
+    m.text = unescape_logged_message m.text
+    
+    return m
+    
+  end
+  
+  def iso_date
+    year + "-" + month + "-" + day    
+  end
+  
+  def iso_date_single_field
+    year + month + day + 'T' + hour + minute + second
+  end
+  
+  def link_to_this_message
+    ENV['SCRIPT_NAME'] + "?times=prefix&start-date=" + iso_date + "&end-date=" + iso_date + "#" + iso_date_single_field
+  end
+  
+  def time
+    Time.gm( year, month, day, hour, minute, second )
+  end
+  
+  def action?
+    @entry_indicator == '*'
+  end
+  
+  def topic?
+    @entry_indicator == '>'
+  end
+  
+  def name_change?
+    @entry_indicator == '#'
+  end
+  
+  def to_s
+    
+    # This is a bit gross; if the message is actually an action,
+    # stick the nick on the front of the message and make the nick '*'
+    
+    if action?
+      text_to_display = nick + ' ' + text
+      nick_to_display = '*'
+    elsif topic?
+      text_to_display = nick + ' ' + text
+      nick_to_display = '-'
+    elsif name_change?
+      text_to_display = nick + ' is now known as ' + text
+      nick_to_display = '-'
+    else
+      text_to_display = text
+      nick_to_display = nick
+    end
+    
+    if $time_style == "prefix"
+      prefix = sprintf " #{hour}:#{minute}:#{second} %9s: ", nick_to_display
+    else
+      prefix = sprintf " %9s: ", nick_to_display
+    end
+    
+    text_to_display = word_wrap( text_to_display, $wrap_at_column - prefix.length )
+    
+    text_to_display.gsub!( /\n/m, "\n" + " " * prefix.length )
+    
+    return prefix + text_to_display
+    
+  end
+  
+  def to_html
+    
+    # puts "Going to display #{text}"
+    
+    if action?
+      text_to_display = nick + ' ' + CGI.escapeHTML( text )
+      nick_to_display = '*'
+    elsif topic?
+      text_to_display = '<span class="topic">' + nick + ' ' + CGI.escapeHTML( text ) + '</span>'
+      nick_to_display = '-'
+    elsif name_change?
+      text_to_display = '<span class="name-change">' + nick + ' is now known as ' + text + '</span>'
+      nick_to_display = '-'
+    else
+
+      text_to_display = CGI.escapeHTML( text )
+
+      text_to_display = text_to_display.gsub( Regexp.new( $url_regexp, Regexp::MULTILINE, 'U' ) ) { |match|
+        url_to_html $1
+      }
+    
+      text_to_display = text_to_display.gsub( $re_regexp ) { |match|
+        $1 + "<span class=\"re\">" + $2 + $9 + "</span>"
+      }
+    
+      break_long_words!( text_to_display )
+    
+      nick_to_display = nick
+
+    end
+    
+    # puts "Now going to display #{text}"
+    
+    if actual_match
+      nick_to_display = '<span class="match">' + CGI.escapeHTML( nick_to_display ) + '</span>'
+    else
+      nick_to_display = CGI.escapeHTML( nick_to_display )
+    end
+    
+    result = "<tr>"
+    result += '<td class="time"><a href="' + link_to_this_message + '">' + "#{hour}:#{minute}:#{second}"  + "</a></td>"
+    result += '<td class="nick"><a name="' + iso_date_single_field + '">' + nick_to_display  + '</a></td>'
+    result += '<td class="text">' + text_to_display + '</td>'
+    result += "</tr>"
+    
+    result 
+    
+  end
+  
+end
+
+$in_table = false
+
+def start_table
+  if ($format == 'html') && (! $in_table)
+    puts '<table class="irc-logs">'
+    $in_table = true
+  end
+end
+
+def end_table
+  if ($format == 'html') && ($in_table)
+    puts '</table>'
+    $in_table = false
+  end
+end
+
+start_table
+
+line_matches = false
+
+skipped_first_separator = false
+
+last_message = nil
+
+
+command = [ "egrep", "-i", "-h", "--", search || "" ]
+command = command + files
+command.push "/dev/null"
+
+safe_backticks( *command ) do |line| 
+  
+  line.chomp!
+  
+  message = Message.from_line line
+  
+  if message
+    
+    iso_date = message.iso_date
+
+    if (message.time < start_date) || (message.time > end_date)
+      next
+    end
+
+    if message.nick == 'meteobot' || message.nick == 'umbrabot' || message.nick == 'ozbot'
+      next
+    end
+    
+    unless iso_date == last_date
+      if $format == 'txt'
+        unless log_mail
+          puts message.time.strftime( "\n%Y-%m-%d (%A)\n\n" )
+        end
+      else
+        puts "<tr><td colspan=\"3\"><h3>" + message.time.strftime( "%Y-%m-%d (%A)" ) + "</h3></td></tr>"
+      end
+    end
+    
+    last_date = iso_date.dup
+    
+    if ($time_style == "sparse") && ($format == 'txt')
+      if (message.time - last_time) > $report_time_after_seconds
+        puts message.time.strftime( "[%H:%m:%M]\n" )
+      end
+      last_time = message.time
+    end
+    
+    if $format == 'txt'
+      puts message
+    else
+      puts message.to_html
+    end
+    
+  end
+  
+end
+
+end_table
+
+print_footer_and_exit
