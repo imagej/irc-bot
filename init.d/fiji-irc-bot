@@ -1,0 +1,47 @@
+#!/bin/sh
+
+PATH=/bin:/usr/bin:/usr/local/bin
+DESC="The #fiji-devel IRC bot"
+NAME=shinybot-fiji.rb
+SCRIPT=/data/devel/irc-bot/shinybot-fiji.rb
+PIDFILE_DIRECTORY=/var/run/irc-bot/
+PIDFILE=$PIDFILE_DIRECTORY/$NAME.pid
+SCRIPTNAME=/etc/init.d/fiji-irc-bot
+
+STDOUT_LOG=/data/devel/irc-bot/fiji-irc-stdout.log
+STDERR_LOG=/data/devel/irc-bot/fiji-irc-stderr.log
+
+USER_DOT_GROUP=irc-bot.irc-bot
+
+DAEMON_ARGUMENTS="--name=$NAME --user=$USER_DOT_GROUP -O $STDOUT_LOG -E $STDERR_LOG --errlog=/tmp/daemon-irc.err --dbglog=/tmp/daemon-irc.dbg -F $PIDFILE"
+
+# Exit if the package is not installed
+[ -x "$SCRIPT" ] || exit 0
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
+. /lib/lsb/init-functions
+
+# Make sure that the pidfile directory exists
+mkdir -p $PIDFILE_DIRECTORY
+chown $USER_DOT_GROUP $PIDFILE_DIRECTORY
+
+case "$1" in
+  start)
+        [ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+	daemon $DAEMON_ARGUMENTS $SCRIPT
+        ;;
+  stop)
+        [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+        daemon $DAEMON_ARGUMENTS --stop $SCRIPT
+	;;
+  restart|force-reload)
+	log_daemon_msg "Restarting $DESC" "$NAME"
+        daemon $DAEMON_ARGUMENTS --restart $SCRIPT
+	;;
+  *)
+        echo "Usage: $SCRIPTNAME {start|stop|restart|force-reload}" >&2
+        exit 3
+	;;
+esac
+
