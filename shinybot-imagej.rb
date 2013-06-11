@@ -90,7 +90,7 @@ def gitweb_url_for_repo( object, lineno, repo )
 
   # CTR HACK to use GitHub code browser for imagej
   if repo == 'imagej2/.git'
-    if is_commit:
+    if is_commit
       return 'https://github.com/imagej/imagej/commit/' + object
     else
       return 'https://github.com/imagej/imagej/' +
