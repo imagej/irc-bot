@@ -404,6 +404,8 @@ class IRCClient
 
         if message
           case message
+          when /^ugt/i
+            send_message( replyto, "Universal Greeting Time: http://www.total-knowledge.com/~ilya/mips/ugt.html" )
           when /^help/i
             send( "PRIVMSG", replyto, ":" + "I'm logging messages for the archive at http://code.imagej.net/chatlogs/imagejdev")
           when /^last\s*$/
