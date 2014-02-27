@@ -377,16 +377,89 @@ class IRCClient
           end
         end
 
-        if text =~ /\b([bB]ug|[Ii]ssue|[Tt]icket)\s+#?(\d+)\b/
+        issue_tracker_known = false
+
+        # Fiji Bugzilla bugs
+        if text =~ /\b[Ff]iji(\s+[Bb]ug)?\s+#(\d+)\b/
+          bug_number = $2.to_i(10)
+          url = "http://fiji.sc/bugzilla/show_bug.cgi?id=#{bug_number}"
+          send( "PRIVMSG", replyto, ":Fiji bug #{bug_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # Fiji GitHub issues
+        if text =~ /\b[Ff]iji(\s+[Ii]ssue)?\s+#(\d+)\b/
+          issue_number = $2.to_i(10)
+          url = "https://github.com/fiji/fiji/issues/#{issue_number}/"
+          send( "PRIVMSG", replyto, ":Fiji issue #{issue_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # ImageJ GitHub issues
+        if text =~ /\b[Ii]mage[Jj](\s+[Ii]ssue)?\s+#(\d+)\b/
+          issue_number = $2.to_i(10)
+          url = "https://github.com/imagej/imagej/issues/#{issue_number}/"
+          send( "PRIVMSG", replyto, ":ImageJ issue #{issue_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # ImageJ Trac tickets
+        if text =~ /\b[Ii]mage[Jj](\s+[Tt]icket)?\s+#(\d+)\b/
           ticket_number = $2.to_i(10)
           url = "http://trac.imagej.net/ticket/#{ticket_number}"
-          send( "PRIVMSG", replyto, ":Ticket #{ticket_number} can be found here: #{url}" )
+          send( "PRIVMSG", replyto, ":ImageJ ticket #{ticket_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # ImgLib2 GitHub issues
+        if text =~ /\b[Ii]mg[Ll]ib2?(\s+[Ii]ssue)?\s+#(\d+)\b/
+          issue_number = $2.to_i(10)
+          url = "https://github.com/imglib/imglib/issues/#{issue_number}/"
+          send( "PRIVMSG", replyto, ":ImgLib2 issue #{issue_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # OME Bio-Formats GitHub issues
+        if text =~ /\b[Bb](io)?-?[Ff](ormats?)?(\s+[Ii]ssue)?\s+#(\d+)\b/
+          issue_number = $4.to_i(10)
+          url = "https://github.com/openmicroscopy/bioformats/issues/#{issue_number}/"
+          send( "PRIVMSG", replyto, ":Bio-Formats issue #{issue_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # OME Trac tickets
+        if text =~ /\b[Oo][Mm][Ee](\s+[Tt]icket)?\s+#(\d+)\b/
+          ticket_number = $2.to_i(10)
+          url = "https://trac.openmicroscopy.org.uk/ome/ticket/#{ticket_number}"
+          send( "PRIVMSG", replyto, ":OME ticket #{ticket_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # SCIFIO GitHub issues
+        if text =~ /\b[Ss][Cc][Ii][Ff][Ii][Oo](\s+[Ii]ssue)?\s+#(\d+)\b/
+          issue_number = $2.to_i(10)
+          url = "https://github.com/scifio/scifio/issues/#{issue_number}"
+          send( "PRIVMSG", replyto, ":SCIFIO issue #{issue_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # SciJava Common GitHub issues
+        if text =~ /\b[Ss]ci[Jj]ava(\s+[Ii]ssue)?\s+#(\d+)\b/
+          issue_number = $2.to_i(10)
+          url = "https://github.com/scijava/scijava-common/issues/#{issue_number}"
+          send( "PRIVMSG", replyto, ":SciJava Common issue #{issue_number} can be found here: #{url}" )
+          issue_tracker_known = true
+        end
+
+        # Warn about unknown projects
+        if (not issue_tracker_known) && (text =~ /\b([Bb]ug|[Ii]ssue|[Tt]icket)\s+\d+\b/)
+          send( "PRIVMSG", replyto, ":Sorry, I don't know which project you mean." )
         end
 
         if text =~ /\br(\d+)\b/
           revision = $1.to_i(10)
           url = "http://trac.imagej.net/changeset/#{revision}"
-          send( "PRIVMSG", replyto, ":Changeset #{revision} can be found here: #{url}" )
+          send( "PRIVMSG", replyto, ":ImageJ changeset #{revision} can be found here: #{url}" )
         end
 
         message = nil
